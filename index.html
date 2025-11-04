@@ -1,0 +1,648 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>EaseAI — Scan & Excel</title>
+
+  <!-- Libraries -->
+  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+  <!-- Fonts: keep Inter for UI, add Playfair Display for elegant brand -->
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&family=Playfair+Display:wght@400;600;700&display=swap" rel="stylesheet">
+
+  <style>
+    :root{
+      --bg-1:#071021; --bg-2:#0b1724;
+      --text:#f6f7fb; --muted:#b9c0ca;
+      --accent:#c79a6a; --accent-2:#f1ddbf;
+      --radius:14px; --btn-radius:12px;
+
+      /* Logo sizing (dikurangi) */
+      --logo-size: 48px;      /* default ukuran logo (lebih kecil) */
+      --logo-size-lg: 56px;   /* ukuran logo untuk layar >= 640px */
+
+      /* Logo background & text variables (lebih terang dan senada) */
+      --logo-bg-1: #f7efe6;
+      --logo-bg-2: #fffaf5;
+      --logo-text: #d4a77a;
+    }
+    *{box-sizing:border-box}
+    html,body{height:100%;margin:0;font-family:"Inter",Arial,sans-serif;background:linear-gradient(180deg,var(--bg-1),var(--bg-2));color:var(--text);-webkit-font-smoothing:antialiased}
+    .wrap{padding:18px;max-width:980px;margin:0 auto}
+    header.appbar{display:flex;gap:12px;align-items:center;justify-content:space-between;margin-bottom:16px}
+    .brand{display:flex;gap:12px;align-items:center}
+    /* Elegant logo (ukuran diperkecil) */
+    .logo{
+      width:var(--logo-size);
+      height:var(--logo-size);
+      border-radius:12px;
+      background:linear-gradient(135deg, var(--logo-bg-1), var(--logo-bg-2));
+      display:flex;align-items:center;justify-content:center;color:var(--logo-text);font-weight:700;
+      box-shadow:0 6px 18px rgba(0,0,0,0.25), inset 0 -4px 10px rgba(255,255,255,0.6);
+      border:1px solid rgba(0,0,0,0.04);
+      font-family: "Playfair Display", serif;
+      font-size:20px; /* disesuaikan untuk monogram agar proporsional */
+      letter-spacing:1px;
+      flex: 0 0 auto;
+    }
+    /* Optional monogram style for a more formal look */
+    .logo .mono{
+      font-style:normal;
+      font-weight:700;
+      display:inline-block;
+      line-height:1;
+    }
+    .title{display:flex;flex-direction:column;}
+    .title h1{
+      font-family:"Playfair Display", serif;
+      font-size:20px;margin:0;color:var(--accent-2);font-weight:600;
+      letter-spacing:0.6px;
+    }
+    .title p{margin:0;font-size:13px;color:var(--muted);margin-top:3px;letter-spacing:0.2px}
+    .card{background:linear-gradient(180deg,rgba(255,255,255,0.02),rgba(255,255,255,0.01));border-radius:var(--radius);padding:16px;box-shadow:0 10px 40px rgba(2,6,23,0.6);border:1px solid rgba(255,255,255,0.03);backdrop-filter:blur(6px)}
+    .tabs{display:flex;gap:8px;margin-bottom:12px}
+    .tab{padding:8px 12px;border-radius:10px;background:transparent;color:var(--muted);font-weight:600;font-size:13px;border:1px solid transparent;cursor:pointer}
+    .tab.active{background:linear-gradient(90deg, rgba(199,154,106,0.12), rgba(241,221,191,0.06));color:var(--accent);border:1px solid rgba(199,154,106,0.12);box-shadow:0 8px 24px rgba(2,6,23,0.45)}
+    .camera-wrap{display:flex;flex-direction:column;gap:10px;align-items:center}
+    /* video/preview area */
+    .preview-box{position:relative;width:100%;max-width:820px;border-radius:10px;overflow:hidden;border:1px solid rgba(255,255,255,0.04);background:#091322}
+    video, img{width:100%;height:auto;display:block;object-fit:cover;transform:none !important}
+    .hint{color:var(--muted);font-size:13px;margin:0}
+    .controls{display:flex;gap:8px;width:100%;margin-top:8px;flex-wrap:wrap}
+    .btn{flex:1 1 auto;display:inline-flex;gap:8px;align-items:center;justify-content:center;padding:10px 12px;border-radius:var(--btn-radius);border:none;cursor:pointer;font-weight:700;font-size:14px;color:#061021;background:linear-gradient(90deg,var(--accent),var(--accent-2));box-shadow:0 12px 30px rgba(2,6,23,0.5);transition:transform .12s ease}
+    .btn.secondary{background:linear-gradient(180deg,rgba(255,255,255,0.02),rgba(255,255,255,0.01));color:var(--text);border:1px solid rgba(255,255,255,0.03);box-shadow:none}
+    .btn:active{transform:translateY(1px)}
+    .btn:disabled{opacity:.45;cursor:not-allowed;transform:none;box-shadow:none}
+    #manualInput{width:100%;min-height:160px;resize:vertical;padding:12px;border-radius:10px;border:1px solid rgba(255,255,255,0.04);background:linear-gradient(180deg, rgba(255,255,255,0.01), rgba(255,255,255,0.00));color:var(--text);font-family:monospace;font-size:13px}
+    #manualTitle{width:100%;padding:10px;border-radius:10px;border:1px solid rgba(255,255,255,0.03);background:transparent;color:var(--text);margin-bottom:8px}
+    .badge{display:inline-block;padding:6px 10px;border-radius:999px;font-size:12px;font-weight:600;color:#081021;background:linear-gradient(90deg, rgba(199,154,106,0.95), rgba(241,221,191,0.95));box-shadow:0 6px 18px rgba(0,0,0,0.45)}
+    pre#output{margin-top:12px;padding:12px;border-radius:10px;background:rgba(255,255,255,0.02);color:#eef6ff;font-size:13px;white-space:pre-wrap;border:1px solid rgba(255,255,255,0.03);max-height:220px;overflow:auto}
+    #chartContainer{margin-top:16px;background:rgba(255,255,255,0.01);border-radius:10px;padding:12px;border:1px solid rgba(255,255,255,0.03)}
+    #chartContainer h3{margin:0 0 8px 0;color:var(--accent);font-size:15px}
+
+    /* crop selection overlay */
+    .overlay { position:absolute; left:0; top:0; right:0; bottom:0; display:flex; align-items:center; justify-content:center; pointer-events:none; }
+    .sel { position:absolute; border:2px dashed rgba(199,154,106,0.95); box-shadow:0 6px 18px rgba(0,0,0,0.5); background:rgba(199,154,106,0.03); pointer-events:auto; touch-action:none; }
+    .handle { position:absolute; width:14px; height:14px; background:var(--accent); border-radius:3px; box-shadow:0 2px 6px rgba(0,0,0,0.5); }
+    .handle.nw{left:-7px;top:-7px;cursor:nwse-resize}
+    .handle.ne{right:-7px;top:-7px;cursor:nesw-resize}
+    .handle.sw{left:-7px;bottom:-7px;cursor:nesw-resize}
+    .handle.se{right:-7px;bottom:-7px;cursor:nwse-resize}
+    .small{padding:8px 10px;font-size:13px}
+
+    @media(min-width:640px){
+      .card{padding:20px}.controls{gap:12px}.btn{padding:12px 16px;font-size:15px}
+      .logo{width:var(--logo-size-lg);height:var(--logo-size-lg);border-radius:14px;font-size:22px}
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header class="appbar">
+      <div class="brand">
+        <div class="logo" aria-hidden="true"><span class="mono">EA</span></div>
+        <div class="title">
+          <h1>EaseAI</h1>
+          <p>Pemrosesan Tabel • Ekspor ke Excel</p>
+        </div>
+      </div>
+    </header>
+
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+        <div class="tabs" role="tablist" aria-label="Mode input">
+          <button id="tabCamera" class="tab active" role="tab" aria-selected="true">Scan Kamera</button>
+          <button id="tabManual" class="tab" role="tab" aria-selected="false">Input Manual</button>
+        </div>
+        <div class="badge">Gunakan tanda "-" untuk pisah kolom (manual)</div>
+      </div>
+
+      <!-- CAMERA SECTION -->
+      <div id="cameraSection" class="section active" style="display:block">
+        <div class="camera-wrap">
+          <div class="preview-box" id="previewBox" style="height:320px;">
+            <video id="camera" autoplay playsinline muted style="display:block;"></video>
+            <img id="preview" alt="Preview" style="display:none;position:absolute;left:0;top:0;width:100%;height:100%;object-fit:contain">
+            <!-- selection overlay -->
+            <div class="overlay" id="overlay" style="display:block">
+              <!-- selection rectangle inserted dynamically -->
+            </div>
+          </div>
+
+          <p class="hint">Arahkan kamera ke tabel. Usahakan pencahayaan merata. Anda bisa unggah gambar, crop sebelum Scan.</p>
+
+          <div class="controls">
+            <button id="captureBtn" class="btn secondary small">📷 Kamera laptop</button>
+            <button id="captureFileBtn" class="btn secondary small">📷  Kamera HP</button>
+            <button id="uploadBtn" class="btn secondary small">📁 Unggah Gambar</button>
+            <button id="toggleCropBtn" class="btn secondary small">✂️ Crop</button>
+            <button id="processBtn" class="btn secondary small" disabled>🔎 Scan</button>
+            <button id="downloadBtn" class="btn small" disabled>⬇️ Download Excel</button>
+          </div>
+
+          <input id="uploadImage" type="file" accept="image/*" style="display:none">
+          <input id="captureOnly" type="file" accept="image/*;capture=environment" capture="environment" style="display:none">
+          <canvas id="snapshot" style="display:none;"></canvas>
+        </div>
+      </div>
+
+      <!-- MANUAL SECTION -->
+      <div id="manualSection" class="section" style="display:none;margin-top:8px">
+        <p class="hint">Masukkan judul data dan tabel secara manual. Gunakan strip "-" untuk memisahkan kolom.</p>
+        <input id="manualTitle" type="text" placeholder="Judul Data (contoh: Data Nilai Siswa)">
+        <textarea id="manualInput" placeholder="Contoh (gunakan '-' untuk pisah kolom):
+Nama - Nilai
+Andi - 80
+Budi - 90
+Citra - 70"></textarea>
+
+        <div style="display:flex;gap:8px;margin-top:10px">
+          <button id="manualProcessBtn" class="btn secondary" style="flex:1">Preview</button>
+          <button id="manualDownloadBtn" class="btn" style="flex:1">⬇️ Download Excel</button>
+        </div>
+      </div>
+
+      <pre id="output" aria-live="polite"></pre>
+
+      <div id="chartContainer" style="display:none">
+        <h3>Grafik Data</h3>
+        <canvas id="chartCanvas"></canvas>
+        <div style="display:flex;gap:8px;margin-top:10px">
+          <button id="downloadChartBtn" class="btn secondary">📥 Download Grafik</button>
+          <div style="flex:1"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // ELEMENTS
+    const camera = document.getElementById('camera');
+    const captureBtn = document.getElementById('captureBtn');
+    const captureFileBtn = document.getElementById('captureFileBtn');
+    const uploadBtn = document.getElementById('uploadBtn');
+    const uploadImage = document.getElementById('uploadImage');
+    const captureOnly = document.getElementById('captureOnly');
+    const snapshot = document.getElementById('snapshot');
+    const preview = document.getElementById('preview');
+    const previewBox = document.getElementById('previewBox');
+    const overlay = document.getElementById('overlay');
+    const processBtn = document.getElementById('processBtn');
+    const downloadBtn = document.getElementById('downloadBtn');
+    const output = document.getElementById('output');
+    const tabCamera = document.getElementById('tabCamera');
+    const tabManual = document.getElementById('tabManual');
+    const cameraSection = document.getElementById('cameraSection');
+    const manualSection = document.getElementById('manualSection');
+    const manualInput = document.getElementById('manualInput');
+    const manualTitle = document.getElementById('manualTitle');
+    const manualProcessBtn = document.getElementById('manualProcessBtn');
+    const manualDownloadBtn = document.getElementById('manualDownloadBtn');
+    const chartContainer = document.getElementById('chartContainer');
+    const chartCanvas = document.getElementById('chartCanvas');
+    const downloadChartBtn = document.getElementById('downloadChartBtn');
+    const toggleCropBtn = document.getElementById('toggleCropBtn');
+
+    let ocrText = "";
+    let manualMode = false;
+    let chartInstance = null;
+    let usingUploadImage = false;
+    let currentStream = null;
+    let cropEnabled = false;
+    let selRect = null; // selection DOM element
+    let selState = null; // {x,y,w,h} in preview-box coordinates
+    let dragging = false;
+    let resizing = false;
+    let resizeHandle = null;
+    let startPointer = null;
+
+    // --- CAMERA MANAGEMENT ---
+    async function startCamera() {
+      // stop existing
+      if (currentStream) {
+        currentStream.getTracks().forEach(t => t.stop());
+        currentStream = null;
+      }
+      try {
+        // always request the environment (rear) camera
+        const constraints = {
+          video: {
+            facingMode: { ideal: 'environment' },
+            width: { ideal: 1280 },
+            height: { ideal: 720 }
+          },
+          audio: false
+        };
+        const stream = await navigator.mediaDevices.getUserMedia(constraints);
+        currentStream = stream;
+        camera.srcObject = stream;
+      } catch (err) {
+        console.error('camera error', err);
+        output.textContent = "Tidak dapat mengakses kamera. Pastikan izin diberikan atau gunakan tombol 'Ambil via Kamera HP'.";
+      }
+    }
+
+    // initialize camera (try environment) — but ignore errors (fallback available)
+    startCamera();
+
+    // --- UPLOAD IMAGE / CAPTURE-FILE FALLBACK ---
+    uploadBtn.addEventListener('click', () => uploadImage.click());
+
+    // "Ambil via Kamera HP" — trigger the input that has capture attribute already set
+    captureFileBtn.addEventListener('click', () => {
+      try {
+        captureOnly.click();
+      } catch (e) {
+        uploadImage.click();
+      }
+    });
+
+    function handleFileSelect(file) {
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        preview.src = e.target.result;
+        preview.style.display = 'block';
+        camera.style.display = 'none';
+        usingUploadImage = true;
+        processBtn.disabled = false;
+        output.textContent = "Gambar dipilih — gunakan crop jika perlu, lalu klik Proses OCR.";
+        resetPreviewState();
+      };
+      reader.readAsDataURL(file);
+    }
+
+    uploadImage.addEventListener('change', (ev) => {
+      const file = ev.target.files && ev.target.files[0];
+      handleFileSelect(file);
+      uploadImage.value = "";
+    });
+
+    captureOnly.addEventListener('change', (ev) => {
+      const file = ev.target.files && ev.target.files[0];
+      handleFileSelect(file);
+      captureOnly.value = "";
+    });
+
+    // --- CAPTURE FRAME (preview from getUserMedia) ---
+    captureBtn.addEventListener('click', () => {
+      if (!camera || !camera.videoWidth) {
+        output.textContent = "Kamera belum siap. Tunggu beberapa detik atau periksa izin kamera. Jika tidak mau memberikan izin, gunakan 'Ambil via Kamera HP'.";
+        return;
+      }
+      snapshot.width = camera.videoWidth;
+      snapshot.height = camera.videoHeight;
+      const ctx = snapshot.getContext('2d');
+      ctx.clearRect(0,0,snapshot.width,snapshot.height);
+      ctx.drawImage(camera, 0, 0, snapshot.width, snapshot.height);
+      const dataURL = snapshot.toDataURL('image/png');
+      preview.src = dataURL;
+      preview.style.display = 'block';
+      camera.style.display = 'none';
+      usingUploadImage = false;
+      processBtn.disabled = false;
+      output.textContent = "Foto diambil — gunakan crop jika perlu, lalu klik Proses OCR.";
+      resetPreviewState();
+    });
+
+    function showCameraElement() {
+      preview.style.display = 'none';
+      camera.style.display = 'block';
+    }
+
+    // --- CROP UI & LOGIC (no rotate controls) ---
+    function resetPreviewState() {
+      clearSelection();
+    }
+
+    toggleCropBtn.addEventListener('click', () => {
+      cropEnabled = !cropEnabled;
+      toggleCropBtn.textContent = cropEnabled ? '✂️ Crop: ON' : '✂️ Crop';
+      if (cropEnabled) {
+        createSelection();
+      } else {
+        clearSelection();
+      }
+    });
+
+    function createSelection() {
+      clearSelection();
+      selRect = document.createElement('div');
+      selRect.className = 'sel';
+      const rect = previewBox.getBoundingClientRect();
+      const w = Math.max(80, rect.width * 0.7);
+      const h = Math.max(60, rect.height * 0.5);
+      const x = (rect.width - w) / 2;
+      const y = (rect.height - h) / 2;
+      selState = { x, y, w, h };
+      updateSelectionDom();
+      ['nw','ne','sw','se'].forEach(cls => {
+        const hnd = document.createElement('div');
+        hnd.className = 'handle ' + cls;
+        selRect.appendChild(hnd);
+      });
+      overlay.appendChild(selRect);
+      overlay.style.pointerEvents = 'auto';
+      selRect.addEventListener('pointerdown', selPointerDown);
+    }
+
+    function clearSelection() {
+      if (selRect && selRect.parentNode) selRect.parentNode.removeChild(selRect);
+      selRect = null;
+      selState = null;
+      overlay.style.pointerEvents = 'none';
+    }
+
+    function updateSelectionDom() {
+      if (!selRect || !selState) return;
+      selRect.style.left = selState.x + 'px';
+      selRect.style.top = selState.y + 'px';
+      selRect.style.width = selState.w + 'px';
+      selRect.style.height = selState.h + 'px';
+    }
+
+    function selPointerDown(e) {
+      e.preventDefault();
+      e.stopPropagation();
+      const target = e.target;
+      const isHandle = target.classList.contains('handle');
+      startPointer = { x: e.clientX, y: e.clientY };
+      if (isHandle) {
+        resizing = true;
+        resizeHandle = Array.from(target.classList).find(c => ['nw','ne','sw','se'].includes(c));
+      } else {
+        dragging = true;
+      }
+      document.addEventListener('pointermove', selPointerMove);
+      document.addEventListener('pointerup', selPointerUp);
+    }
+
+    function selPointerMove(e) {
+      if (!selState) return;
+      const rect = previewBox.getBoundingClientRect();
+      const dx = e.clientX - startPointer.x;
+      const dy = e.clientY - startPointer.y;
+      startPointer = { x: e.clientX, y: e.clientY };
+      if (dragging) {
+        selState.x = Math.max(0, Math.min(rect.width - selState.w, selState.x + dx));
+        selState.y = Math.max(0, Math.min(rect.height - selState.h, selState.y + dy));
+      } else if (resizing) {
+        if (resizeHandle === 'nw') {
+          selState.x += dx; selState.y += dy; selState.w -= dx; selState.h -= dy;
+        } else if (resizeHandle === 'ne') {
+          selState.y += dy; selState.w += dx; selState.h -= dy;
+        } else if (resizeHandle === 'sw') {
+          selState.x += dx; selState.w -= dx; selState.h += dy;
+        } else if (resizeHandle === 'se') {
+          selState.w += dx; selState.h += dy;
+        }
+        selState.w = Math.max(40, selState.w);
+        selState.h = Math.max(30, selState.h);
+        selState.x = Math.max(0, Math.min(rect.width - selState.w, selState.x));
+        selState.y = Math.max(0, Math.min(rect.height - selState.h, selState.y));
+      }
+      updateSelectionDom();
+    }
+
+    function selPointerUp() {
+      dragging = false; resizing = false; resizeHandle = null; startPointer = null;
+      document.removeEventListener('pointermove', selPointerMove);
+      document.removeEventListener('pointerup', selPointerUp);
+    }
+
+    // --- OCR PREPARATION: APPLY CROP BEFORE OCR (no rotation controls) ---
+    async function buildImageForOcr() {
+      if (!preview.src) return null;
+      const img = new Image();
+      img.crossOrigin = "anonymous";
+      await new Promise((res, rej) => {
+        img.onload = res; img.onerror = rej; img.src = preview.src;
+      }).catch(() => { /* ignore */ });
+
+      const srcW = img.naturalWidth || img.width;
+      const srcH = img.naturalHeight || img.height;
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+      canvas.width = srcW; canvas.height = srcH;
+      ctx.clearRect(0,0,canvas.width,canvas.height);
+      ctx.drawImage(img, 0, 0, srcW, srcH);
+
+      if (cropEnabled && selState) {
+        const boxRect = previewBox.getBoundingClientRect();
+        const previewRatio = boxRect.width / boxRect.height;
+        const imgRatio = srcW / srcH;
+        let drawW, drawH, offsetX, offsetY;
+        if (imgRatio > previewRatio) {
+          drawW = boxRect.width;
+          drawH = boxRect.width / imgRatio;
+          offsetX = 0;
+          offsetY = (boxRect.height - drawH) / 2;
+        } else {
+          drawH = boxRect.height;
+          drawW = boxRect.height * imgRatio;
+          offsetY = 0;
+          offsetX = (boxRect.width - drawW) / 2;
+        }
+        const sx = (selState.x - offsetX) / drawW * srcW;
+        const sy = (selState.y - offsetY) / drawH * srcH;
+        const sw = selState.w / drawW * srcW;
+        const sh = selState.h / drawH * srcH;
+
+        const rx = Math.max(0, Math.min(canvas.width, sx));
+        const ry = Math.max(0, Math.min(canvas.height, sy));
+        const rw = Math.max(1, Math.min(canvas.width - rx, sw));
+        const rh = Math.max(1, Math.min(canvas.height - ry, sh));
+
+        const cropCanvas = document.createElement('canvas');
+        cropCanvas.width = Math.round(rw);
+        cropCanvas.height = Math.round(rh);
+        const cctx = cropCanvas.getContext('2d');
+        cctx.drawImage(canvas, rx, ry, rw, rh, 0, 0, cropCanvas.width, cropCanvas.height);
+        return cropCanvas.toDataURL('image/png');
+      } else {
+        return canvas.toDataURL('image/png');
+      }
+    }
+
+    // --- OCR PROCESS ---
+    processBtn.addEventListener('click', async () => {
+      if (!preview.src) {
+        output.textContent = "Silakan ambil foto atau unggah gambar terlebih dahulu.";
+        return;
+      }
+      processBtn.disabled = true;
+      output.textContent = "Mempersiapkan gambar untuk OCR...";
+      let imgForOcr = null;
+      try {
+        imgForOcr = await buildImageForOcr();
+      } catch (err) {
+        console.error(err);
+        output.textContent = "Gagal menyiapkan gambar: " + err;
+        processBtn.disabled = false;
+        return;
+      }
+
+      if (!imgForOcr) {
+        output.textContent = "Gagal menyiapkan gambar untuk OCR.";
+        processBtn.disabled = false;
+        return;
+      }
+
+      output.textContent = "Sedang memproses OCR... (bisa memakan beberapa saat)";
+      try {
+        const res = await Tesseract.recognize(imgForOcr, 'eng', { logger: m => {} });
+        ocrText = res.data.text || "";
+        output.textContent = ocrText || "OCR selesai, namun tidak ditemukan teks.";
+        downloadBtn.disabled = false;
+      } catch (err) {
+        output.textContent = "Error OCR: " + err;
+      } finally {
+        processBtn.disabled = false;
+      }
+    });
+
+    // --- PARSING & EXPORT / CHART (same robust parser as before) ---
+    function parseLinesSmart(lines, isManual = false) {
+      const rows = lines.map(r => r.trim()).filter(r => r !== "");
+      if (rows.length === 0) return { table: [], numericIdx: -1 };
+
+      const splitCandidates = rows.map(line => {
+        if (isManual && line.includes('-')) {
+          const parts = line.split(/\s*-\s*/).map(s => s.trim()).filter(s => s !== "");
+          if (parts.length > 1) return parts;
+        }
+        let parts = line.split(/\t| {2,}/).map(s => s.trim()).filter(s => s !== "");
+        if (parts.length === 1) parts = line.split(/\s+/).map(s => s.trim()).filter(s => s !== "");
+        if (parts.length === 1) {
+          const m = parts[0].match(/^(.*?)([-]?\d[\d.,]*)$/);
+          if (m) {
+            const left = m[1].trim(); const right = m[2].trim();
+            if (left) parts = [left, right];
+          }
+        }
+        return parts;
+      });
+
+      const maxLen = Math.max(...splitCandidates.map(a => a.length));
+      const counts = new Array(maxLen).fill(0);
+      const startIndex = rows.length > 1 ? 1 : 0;
+      for (let i = startIndex; i < splitCandidates.length; i++) {
+        const arr = splitCandidates[i];
+        arr.forEach((cell, idx) => {
+          const num = parseFloat(String(cell).replace(/,/g, '.'));
+          if (!isNaN(num)) counts[idx] += 1;
+        });
+      }
+
+      let numericIdx = -1;
+      const maxCount = Math.max(...counts);
+      if (maxCount > 0) numericIdx = counts.indexOf(maxCount);
+      if (numericIdx === -1) numericIdx = Math.min(1, maxLen - 1);
+
+      const table = splitCandidates.map(arr => arr.map(c => c.trim()));
+      return { table, numericIdx };
+    }
+
+    function exportAndShowChartFromLines(lines, filename = "hasil_tabel.xlsx", isManual = false) {
+      const { table, numericIdx } = parseLinesSmart(lines, isManual);
+      if (table.length === 0) { output.textContent = "Tidak ada data untuk diekspor."; return; }
+
+      const ws = XLSX.utils.aoa_to_sheet(table);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "Data");
+      XLSX.writeFile(wb, filename);
+
+      if (table.length > 1) {
+        const labels = table.slice(1).map((r,i) => (r[0] !== undefined && String(r[0]).trim()!=='') ? r[0] : `Baris ${i+1}`);
+        const values = table.slice(1).map(r => {
+          const raw = r[numericIdx] !== undefined ? r[numericIdx] : r[r.length-1];
+          const parsed = parseFloat(String(raw).replace(/,/g, '.'));
+          return isNaN(parsed) ? 0 : parsed;
+        });
+
+        if (chartInstance) chartInstance.destroy();
+        chartInstance = new Chart(chartCanvas, {
+          type: 'bar',
+          data: { labels, datasets: [{ label: (table[0][numericIdx] || 'Nilai'), data: values, backgroundColor: 'rgba(199,154,106,0.95)', borderRadius:6 }] },
+          options: { responsive:true, plugins:{legend:{display:false}}, scales:{ y:{ beginAtZero:true } } }
+        });
+        chartContainer.style.display = "block";
+      } else {
+        chartContainer.style.display = "none";
+      }
+    }
+
+    // download btn events
+    downloadBtn.addEventListener('click', () => {
+      let rows;
+      if (manualMode) {
+        rows = manualInput.value.split('\n').filter(r => r.trim() !== '');
+        exportAndShowChartFromLines(rows, (manualTitle.value || "hasil_tabel") + ".xlsx", true);
+      } else {
+        rows = ocrText.split('\n').filter(r => r.trim() !== '');
+        exportAndShowChartFromLines(rows, "hasil_tabel.xlsx", false);
+      }
+    });
+
+    manualProcessBtn.addEventListener('click', () => {
+      const txt = manualInput.value.trim();
+      if (!txt) { output.textContent = "Masukkan data di area teks."; return; }
+      output.textContent = txt;
+      downloadBtn.disabled = false;
+    });
+
+    manualDownloadBtn.addEventListener('click', () => {
+      const lines = manualInput.value.split('\n').filter(r => r.trim() !== '');
+      if (lines.length === 0) { output.textContent = "Tidak ada data untuk diekspor."; return; }
+      const fname = (manualTitle.value || "hasil_tabel").replace(/[^\w\-]+/g,"_") + ".xlsx";
+      exportAndShowChartFromLines(lines, fname, true);
+      downloadBtn.disabled = false;
+    });
+
+    downloadChartBtn.addEventListener('click', () => {
+      if (!chartInstance) return;
+      const link = document.createElement('a');
+      link.href = chartCanvas.toDataURL('image/png', 1);
+      link.download = (manualTitle.value || 'grafik-data') + '.png';
+      link.click();
+    });
+
+    // TAB SWITCH
+    tabCamera.addEventListener('click', () => {
+      tabCamera.classList.add('active'); tabManual.classList.remove('active');
+      cameraSection.style.display = 'block'; manualSection.style.display = 'none';
+      manualMode = false; downloadBtn.disabled = true; output.textContent = "";
+      chartContainer.style.display = "none";
+      showCameraElement();
+    });
+    tabManual.addEventListener('click', () => {
+      tabManual.classList.add('active'); tabCamera.classList.remove('active');
+      manualSection.style.display = 'block'; cameraSection.style.display = 'none';
+      manualMode = true; downloadBtn.disabled = true; output.textContent = "";
+      chartContainer.style.display = "none";
+    });
+
+    // double-click toggles crop
+    previewBox.addEventListener('dblclick', () => {
+      cropEnabled = !cropEnabled;
+      toggleCropBtn.textContent = cropEnabled ? '✂️ Crop: ON' : '✂️ Crop';
+      if (cropEnabled) createSelection(); else clearSelection();
+    });
+
+    // Utility to clear selection if window resized (recreate)
+    window.addEventListener('resize', () => {
+      if (cropEnabled) {
+        createSelection();
+      }
+    });
+
+    // make sure video not mirrored visually (explicit)
+    camera.style.transform = 'none';
+
+    // end of script
+  </script>
+</body>
+</html>
